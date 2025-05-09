@@ -1,0 +1,156 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local MAX_VOLUME     = 7
+local RIGHT_MARGIN   = 200
+local FRAME_WIDTH    = 200
+
+local aim9xSound = Instance.new("Sound")
+aim9xSound.SoundId   = "rbxassetid://717392973"
+aim9xSound.Volume    = MAX_VOLUME
+aim9xSound.Looped    = true
+aim9xSound.Parent    = workspace
+
+local isSoundPlaying = false
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Four then
+        if isSoundPlaying then
+            aim9xSound:Stop()
+            isSoundPlaying = false
+            print("AIM-9X sound stopped")
+        else
+            aim9xSound:Play()
+            isSoundPlaying = true
+            print("AIM-9X sound playing")
+        end
+    end
+end)
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name           = "Aim9XSettings"
+screenGui.ResetOnSpawn   = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent         = playerGui
+
+local settingsButton = Instance.new("ImageButton")
+settingsButton.Name                   = "SettingsButton"
+settingsButton.Size                   = UDim2.new(0, 40, 0, 40)
+settingsButton.Position               = UDim2.new(1, -RIGHT_MARGIN, 0, 10)
+settingsButton.AnchorPoint            = Vector2.new(1, 0)
+settingsButton.BackgroundColor3       = Color3.new(0, 0, 0)
+settingsButton.BackgroundTransparency = 0
+settingsButton.Image                  = "rbxassetid://2161586632"
+settingsButton.Parent                 = screenGui
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 4)
+btnCorner.Parent       = settingsButton
+
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Name            = "SettingsFrame"
+settingsFrame.Size            = UDim2.new(0, FRAME_WIDTH, 0, 130)
+settingsFrame.Position        = UDim2.new(1, -(RIGHT_MARGIN + FRAME_WIDTH), 0, 60)
+settingsFrame.AnchorPoint     = Vector2.new(1, 0)
+settingsFrame.BackgroundColor3= Color3.fromRGB(30, 30, 30)
+settingsFrame.Visible         = false
+settingsFrame.Parent          = screenGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 12)
+frameCorner.Parent       = settingsFrame
+
+local title = Instance.new("TextLabel")
+title.Size                   = UDim2.new(1, 0, 0, 24)
+title.Position               = UDim2.new(0, 0, 0, 0)
+title.BackgroundTransparency = 1
+title.Font                   = Enum.Font.SourceSansBold
+title.TextSize               = 20
+title.TextColor3             = Color3.new(1, 1, 1)
+title.Text                   = "Sound Settings"
+title.Parent                 = settingsFrame
+
+local volLabel = Instance.new("TextLabel")
+volLabel.Size                   = UDim2.new(1, 0, 0, 18)
+volLabel.Position               = UDim2.new(0, 0, 0, 28)
+volLabel.BackgroundTransparency = 1
+volLabel.Font                   = Enum.Font.SourceSans
+volLabel.TextSize               = 16
+volLabel.TextColor3             = Color3.new(1, 1, 1)
+volLabel.Text                   = ("Volume: %.2f / %.2f"):format(aim9xSound.Volume, MAX_VOLUME)
+volLabel.Parent                 = settingsFrame
+
+local sliderTrack = Instance.new("Frame")
+sliderTrack.Size             = UDim2.new(0.8, 0, 0, 8)
+sliderTrack.Position         = UDim2.new(0.1, 0, 0, 60)
+sliderTrack.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+sliderTrack.Parent           = settingsFrame
+
+local trackCorner = Instance.new("UICorner")
+trackCorner.CornerRadius = UDim.new(0, 4)
+trackCorner.Parent       = sliderTrack
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size             = UDim2.new(aim9xSound.Volume / MAX_VOLUME, 0, 1, 0)
+sliderFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+sliderFill.Parent           = sliderTrack
+
+local sliderThumb = Instance.new("ImageButton")
+sliderThumb.Size                = UDim2.new(0, 16, 0, 16)
+sliderThumb.AnchorPoint         = Vector2.new(0.5, 0.5)
+sliderThumb.Position            = UDim2.new(aim9xSound.Volume / MAX_VOLUME, 0, 0.5, 0)
+sliderThumb.BackgroundColor3    = Color3.fromRGB(200, 200, 200)
+sliderThumb.Parent              = sliderTrack
+
+local thumbCorner = Instance.new("UICorner")
+thumbCorner.CornerRadius = UDim.new(0, 8)
+thumbCorner.Parent       = sliderThumb
+
+local dragging = false
+sliderThumb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+end)
+sliderThumb.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local absPos = sliderTrack.AbsolutePosition
+        local absSize= sliderTrack.AbsoluteSize
+        local mouseX = UserInputService:GetMouseLocation().X
+        local rel    = math.clamp((mouseX - absPos.X) / absSize.X, 0, 1)
+        local newVol = rel * MAX_VOLUME
+        sliderFill.Size      = UDim2.new(rel, 0, 1, 0)
+        sliderThumb.Position = UDim2.new(rel, 0, 0.5, 0)
+        aim9xSound.Volume    = newVol
+        volLabel.Text        = ("Volume: %.2f / %.2f"):format(newVol, MAX_VOLUME)
+        print(("Volume set to %.2f"):format(newVol))
+    end
+end)
+
+local testButton = Instance.new("TextButton")
+testButton.Size               = UDim2.new(0.8, 0, 0, 24)
+testButton.Position           = UDim2.new(0.1, 0, 0, 90)
+testButton.BackgroundColor3   = Color3.fromRGB(0, 170, 255)
+testButton.Font               = Enum.Font.SourceSansBold
+testButton.TextSize           = 18
+testButton.TextColor3         = Color3.new(1, 1, 1)
+testButton.Text               = "Test"
+testButton.Parent             = settingsFrame
+
+local testCorner = Instance.new("UICorner")
+testCorner.CornerRadius = UDim.new(0, 6)
+testCorner.Parent       = testButton
+
+testButton.MouseButton1Click:Connect(function()
+    aim9xSound:Play()
+    delay(1, function() aim9xSound:Stop() end)
+    print(("Test play at volume %.2f"):format(aim9xSound.Volume))
+end)
+
+settingsButton.MouseButton1Click:Connect(function()
+    settingsFrame.Visible = not settingsFrame.Visible
+end)
