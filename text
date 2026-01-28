@@ -531,24 +531,21 @@ local function play(url)
                 local frame_time = get_next_frame_time()
                 local current_time = os.clock()
                 
-                -- Проверяем синхронизацию с аудио
-                local audio_time = _sync_data.start_time + (_sync_data.audio_chunks_played * (1024 / 48000))
-                local sync_diff = audio_time - frame_time
-                
                 -- Решаем: показывать, пропускать или ждать этот кадр
+                local skip_frame = false
                 if current_time >= frame_time then
                     -- Время показа кадра уже наступило или прошло
                     if current_time - frame_time > _sync_data.frame_duration * 2 then
                         -- Слишком сильно отстаем, пропускаем кадр
                         frames_skipped = frames_skipped + 1
                         consecutive_misses = consecutive_misses + 1
+                        skip_frame = true
                         
                         if args.verbose and consecutive_misses >= max_misses then
                             term.setCursorPos(1, 3)
                             term.clearLine()
                             write_colored(("Video lagging: skipped %d frames"):format(frames_skipped), colors.yellow)
                         end
-                        goto continue
                     else
                         -- Небольшое отставание, показываем немедленно
                         consecutive_misses = 0
@@ -562,35 +559,35 @@ local function play(url)
                     consecutive_misses = 0
                 end
                 
-                -- Показываем кадр
-                term.setCursorPos(1, 1)
-                local colors_part = string.unpack("c" .. (width * height), frame, 1 + width * height)
-                local background_part = string.unpack("c" .. (width * height), frame, 1 + width * height * 2)
-                term.blit(
-                    string.unpack("c" .. (width * height), frame, 1),
-                    colors_part,
-                    background_part
-                )
-                
-                _sync_data.video_frames_played = _sync_data.video_frames_played + 1
-                
-                -- Периодическая коррекция синхронизации
-                if total_frames % math.floor(video_fps / 2) == 0 then
-                    local video_elapsed = _sync_data.video_frames_played / video_fps
-                    local audio_elapsed = _sync_data.audio_chunks_played * (1024 / 48000)
-                    local drift = audio_elapsed - video_elapsed
+                if not skip_frame then
+                    -- Показываем кадр
+                    term.setCursorPos(1, 1)
+                    local colors_part = string.unpack("c" .. (width * height), frame, 1 + width * height)
+                    local background_part = string.unpack("c" .. (width * height), frame, 1 + width * height * 2)
+                    term.blit(
+                        string.unpack("c" .. (width * height), frame, 1),
+                        colors_part,
+                        background_part
+                    )
                     
-                    if math.abs(drift) > 0.1 then
-                        -- Видео отстает от аудио
-                        if args.verbose then
-                            term.setCursorPos(1, 4)
-                            term.clearLine()
-                            write_colored(("Sync drift: %.3fs"):format(drift), colors.orange)
+                    _sync_data.video_frames_played = _sync_data.video_frames_played + 1
+                    
+                    -- Периодическая коррекция синхронизации
+                    if total_frames % math.floor(video_fps / 2) == 0 then
+                        local video_elapsed = _sync_data.video_frames_played / video_fps
+                        local audio_elapsed = _sync_data.audio_chunks_played * (1024 / 48000)
+                        local drift = audio_elapsed - video_elapsed
+                        
+                        if math.abs(drift) > 0.1 then
+                            -- Видео отстает от аудио
+                            if args.verbose then
+                                term.setCursorPos(1, 4)
+                                term.clearLine()
+                                write_colored(("Sync drift: %.3fs"):format(drift), colors.orange)
+                            end
                         end
                     end
                 end
-                
-                ::continue::
                 
                 -- Проверка на прерывание
                 local event = os.pullEvent()
@@ -657,6 +654,7 @@ local function play(url)
                 local current_time = os.clock()
                 
                 -- Проверяем синхронизацию
+                local skip_chunk = false
                 if current_time < chunk_time then
                     -- Ждем времени воспроизведения
                     local wait_time = chunk_time - current_time
@@ -666,46 +664,46 @@ local function play(url)
                 elseif current_time - chunk_time > chunk_duration * 3 then
                     -- Слишком сильно отстаем, пропускаем чанк
                     chunks_skipped = chunks_skipped + 1
+                    skip_chunk = true
                     if args.verbose and chunks_skipped % 10 == 0 then
                         term.setCursorPos(1, 6)
                         term.clearLine()
                         write_colored(("Audio skipped: %d chunks"):format(chunks_skipped), colors.yellow)
                     end
-                    goto audio_continue
                 end
                 
-                -- Отправляем аудио на устройства
-                local write_functions = {}
-                for i = 1, #audiodevices do
-                    local audiodevice = audiodevices[i]
-                    table.insert(write_functions, function()
-                        audiodevice:write(chunk)
-                    end)
-                end
-                
-                parallel.waitForAll(table.unpack(write_functions))
-                
-                _sync_data.audio_chunks_played = _sync_data.audio_chunks_played + 1
-                total_chunks_played = total_chunks_played + 1
-                last_chunk_time = chunk_time
-                
-                -- Периодическая проверка синхронизации
-                if total_chunks_played % 100 == 0 then
-                    local expected_time = _sync_data.start_time + (total_chunks_played * chunk_duration)
-                    local actual_time = os.clock()
-                    local drift = actual_time - expected_time
+                if not skip_chunk then
+                    -- Отправляем аудио на устройства
+                    local write_functions = {}
+                    for i = 1, #audiodevices do
+                        local audiodevice = audiodevices[i]
+                        table.insert(write_functions, function()
+                            audiodevice:write(chunk)
+                        end)
+                    end
                     
-                    if math.abs(drift) > 0.05 then
-                        -- Корректируем время следующего чанка
-                        if args.verbose then
-                            term.setCursorPos(1, 7)
-                            term.clearLine()
-                            write_colored(("Audio drift: %.3fs"):format(drift), colors.orange)
+                    parallel.waitForAll(table.unpack(write_functions))
+                    
+                    _sync_data.audio_chunks_played = _sync_data.audio_chunks_played + 1
+                    total_chunks_played = total_chunks_played + 1
+                    last_chunk_time = chunk_time
+                    
+                    -- Периодическая проверка синхронизации
+                    if total_chunks_played % 100 == 0 then
+                        local expected_time = _sync_data.start_time + (total_chunks_played * chunk_duration)
+                        local actual_time = os.clock()
+                        local drift = actual_time - expected_time
+                        
+                        if math.abs(drift) > 0.05 then
+                            -- Корректируем время следующего чанка
+                            if args.verbose then
+                                term.setCursorPos(1, 7)
+                                term.clearLine()
+                                write_colored(("Audio drift: %.3fs"):format(drift), colors.orange)
+                            end
                         end
                     end
                 end
-                
-                ::audio_continue::
                 
                 -- Быстрая проверка на прерывание
                 local events = {os.pullEvent()}
