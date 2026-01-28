@@ -473,11 +473,6 @@ local function play(url)
     -- Синхронизированная версия воспроизведения видео
     local function _play_video_sync()
         if not args.no_video then
-            local string_unpack
-            if not string.unpack then
-                string_unpack = libs.string_pack.unpack
-            end
-            
             -- Ожидаем старта синхронизации
             while not _sync_data.start_time do
                 os.sleep(0.001)
@@ -492,7 +487,7 @@ local function play(url)
             
             -- Получаем информацию о разрешении
             local width, height = term.getSize()
-            local frame_size = width * height * 3
+            local frame_size = width * height
             
             local consecutive_misses = 0
             local max_misses = 3
@@ -560,30 +555,40 @@ local function play(url)
                 end
                 
                 if not skip_frame then
-                    -- Показываем кадр
-                    term.setCursorPos(1, 1)
-                    local colors_part = string.unpack("c" .. (width * height), frame, 1 + width * height)
-                    local background_part = string.unpack("c" .. (width * height), frame, 1 + width * height * 2)
-                    term.blit(
-                        string.unpack("c" .. (width * height), frame, 1),
-                        colors_part,
-                        background_part
-                    )
-                    
-                    _sync_data.video_frames_played = _sync_data.video_frames_played + 1
-                    
-                    -- Периодическая коррекция синхронизации
-                    if total_frames % math.floor(video_fps / 2) == 0 then
-                        local video_elapsed = _sync_data.video_frames_played / video_fps
-                        local audio_elapsed = _sync_data.audio_chunks_played * (1024 / 48000)
-                        local drift = audio_elapsed - video_elapsed
+                    -- Проверяем длину кадра
+                    local expected_length = frame_size * 3  -- текст + цвета + фон
+                    if #frame < expected_length then
+                        -- Неполный кадр, пропускаем
+                        if args.verbose then
+                            term.setCursorPos(1, 4)
+                            term.clearLine()
+                            write_colored(("Incomplete frame: %d < %d"):format(#frame, expected_length), colors.red)
+                        end
+                    else
+                        -- Извлекаем части кадра с помощью string.sub
+                        local text_part = string.sub(frame, 1, frame_size)
+                        local colors_part = string.sub(frame, frame_size + 1, frame_size * 2)
+                        local background_part = string.sub(frame, frame_size * 2 + 1, frame_size * 3)
                         
-                        if math.abs(drift) > 0.1 then
-                            -- Видео отстает от аудио
-                            if args.verbose then
-                                term.setCursorPos(1, 4)
-                                term.clearLine()
-                                write_colored(("Sync drift: %.3fs"):format(drift), colors.orange)
+                        -- Показываем кадр
+                        term.setCursorPos(1, 1)
+                        term.blit(text_part, colors_part, background_part)
+                        
+                        _sync_data.video_frames_played = _sync_data.video_frames_played + 1
+                        
+                        -- Периодическая коррекция синхронизации
+                        if total_frames % math.floor(video_fps / 2) == 0 then
+                            local video_elapsed = _sync_data.video_frames_played / video_fps
+                            local audio_elapsed = _sync_data.audio_chunks_played * (1024 / 48000)
+                            local drift = audio_elapsed - video_elapsed
+                            
+                            if math.abs(drift) > 0.1 then
+                                -- Видео отстает от аудио
+                                if args.verbose then
+                                    term.setCursorPos(1, 5)
+                                    term.clearLine()
+                                    write_colored(("Sync drift: %.3fs"):format(drift), colors.orange)
+                                end
                             end
                         end
                     end
@@ -597,7 +602,7 @@ local function play(url)
             end
             
             if args.verbose then
-                term.setCursorPos(1, 5)
+                term.setCursorPos(1, 6)
                 term.clearLine()
                 write_colored(("Video finished: %d frames, %d skipped"):format(total_frames, frames_skipped), colors.green)
             end
@@ -666,7 +671,7 @@ local function play(url)
                     chunks_skipped = chunks_skipped + 1
                     skip_chunk = true
                     if args.verbose and chunks_skipped % 10 == 0 then
-                        term.setCursorPos(1, 6)
+                        term.setCursorPos(1, 7)
                         term.clearLine()
                         write_colored(("Audio skipped: %d chunks"):format(chunks_skipped), colors.yellow)
                     end
@@ -697,7 +702,7 @@ local function play(url)
                         if math.abs(drift) > 0.05 then
                             -- Корректируем время следующего чанка
                             if args.verbose then
-                                term.setCursorPos(1, 7)
+                                term.setCursorPos(1, 8)
                                 term.clearLine()
                                 write_colored(("Audio drift: %.3fs"):format(drift), colors.orange)
                             end
@@ -713,7 +718,7 @@ local function play(url)
             end
             
             if args.verbose then
-                term.setCursorPos(1, 8)
+                term.setCursorPos(1, 9)
                 term.clearLine()
                 write_colored(("Audio finished: %d chunks, %d skipped"):format(total_chunks_played, chunks_skipped), colors.green)
             end
